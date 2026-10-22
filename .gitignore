@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.*
+!.env.example
+frontend-next/.env.local
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+frontend-next/node_modules/
+frontend-next/.next/
+
+# Backups and temporary files
+frontend-next-backup/
+.DS_Store
+*.log
+
+# Large trained model — share separately
+backend/*.joblib

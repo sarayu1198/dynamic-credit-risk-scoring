@@ -1,0 +1,55 @@
+DYNAMIC CREDIT RISK SCORING — EDA AND TRAIN/TEST SPLIT
+
+Input file: cleaned_credit_risk.csv
+Original cleaned dataset rows: 30,000
+Original cleaned dataset columns: 24
+Exact duplicate rows found in current file: 35
+Missing cells in current file: 0
+
+TARGET DISTRIBUTION
+- 0 (no default): 23,364 (77.88%)
+- 1 (default): 6,636 (22.12%)
+
+FEATURE SELECTION
+- Excluded profile/demographic columns for the initial behaviour-focused model: sex, education, marriage, age
+- Predictors retained: 19
+- Predictors: limit_bal, pay_status_sep, pay_status_aug, pay_status_jul, pay_status_jun, pay_status_may, pay_status_apr, bill_amt1, bill_amt2, bill_amt3, bill_amt4, bill_amt5, bill_amt6, pay_amt1, pay_amt2, pay_amt3, pay_amt4, pay_amt5, pay_amt6
+
+TRAIN/TEST SPLIT
+- 80% training / 20% testing
+- random_state = 42 for reproducibility
+- stratify=y preserves the target-class proportions in both sets
+- Training rows: 24,000
+- Testing rows: 6,000
+- Training target proportions: {0: 0.7788, 1: 0.2212}
+- Testing target proportions: {0: 0.7788, 1: 0.2212}
+
+NUMERIC SUMMARY OF RETAINED FEATURES
+                  count       mean        std       min       25%       50%        75%        max
+limit_bal       30000.0  167484.32  129747.66   10000.0  50000.00  140000.0  240000.00  1000000.0
+pay_status_sep  30000.0      -0.02       1.12      -2.0     -1.00       0.0       0.00        8.0
+pay_status_aug  30000.0      -0.13       1.20      -2.0     -1.00       0.0       0.00        8.0
+pay_status_jul  30000.0      -0.17       1.20      -2.0     -1.00       0.0       0.00        8.0
+pay_status_jun  30000.0      -0.22       1.17      -2.0     -1.00       0.0       0.00        8.0
+pay_status_may  30000.0      -0.27       1.13      -2.0     -1.00       0.0       0.00        8.0
+pay_status_apr  30000.0      -0.29       1.15      -2.0     -1.00       0.0       0.00        8.0
+bill_amt1       30000.0   51223.33   73635.86 -165580.0   3558.75   22381.5   67091.00   964511.0
+bill_amt2       30000.0   49179.08   71173.77  -69777.0   2984.75   21200.0   64006.25   983931.0
+bill_amt3       30000.0   47013.15   69349.39 -157264.0   2666.25   20088.5   60164.75  1664089.0
+bill_amt4       30000.0   43262.95   64332.86 -170000.0   2326.75   19052.0   54506.00   891586.0
+bill_amt5       30000.0   40311.40   60797.16  -81334.0   1763.00   18104.5   50190.50   927171.0
+bill_amt6       30000.0   38871.76   59554.11 -339603.0   1256.00   17071.0   49198.25   961664.0
+pay_amt1        30000.0    5663.58   16563.28       0.0   1000.00    2100.0    5006.00   873552.0
+pay_amt2        30000.0    5921.16   23040.87       0.0    833.00    2009.0    5000.00  1684259.0
+pay_amt3        30000.0    5225.68   17606.96       0.0    390.00    1800.0    4505.00   896040.0
+pay_amt4        30000.0    4826.08   15666.16       0.0    296.00    1500.0    4013.25   621000.0
+pay_amt5        30000.0    4799.39   15278.31       0.0    252.50    1500.0    4031.50   426529.0
+pay_amt6        30000.0    5215.50   17777.47       0.0    117.75    1500.0    4000.00   528666.0
+
+IMPORTANT METHODOLOGY NOTES
+- The test set must not be used to fit imputers, scalers, feature selection, or hyperparameters.
+- The provided Python script uses pipelines so imputation and scaling are fit on training data only.
+- The initial feature set excludes sex, education, marriage, and age; this is a deliberate starting choice, not proof of fairness.
+- Logistic Regression, Random Forest, and optional XGBoost are compared using ROC-AUC, precision, recall, F1, accuracy, and confusion matrices.
+- For final model selection, tune using stratified cross-validation on training data only, then report the held-out test metrics once.
+- The dataset is historical Taiwan credit-card data and is not validated for Indian lending decisions.
