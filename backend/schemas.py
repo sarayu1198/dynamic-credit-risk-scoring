@@ -5,12 +5,13 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+
 class BorrowerCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=150)
-    managed_by: int = Field(gt=0)
     external_reference: str | None = Field(
         default=None, max_length=50
     )
+
 
 
 class BorrowerResponse(BaseModel):
@@ -43,6 +44,11 @@ from pydantic import Field
 
 class PredictionRequest(BaseModel):
     limit_bal: float = Field(gt=0)
+
+    sex: int = Field(ge=1, le=2)
+    education: int = Field(ge=0, le=6)
+    marriage: int = Field(ge=0, le=3)
+    age: int = Field(gt=0, le=120)
 
     pay_status_sep: int
     pay_status_aug: int

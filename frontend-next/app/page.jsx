@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
+import "./App-auth.css";
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
@@ -10,6 +11,10 @@ const API_URL = (
 
 const initialFeatures = {
   limit_bal: 50000,
+  sex: 2,
+  education: 2,
+  marriage: 1,
+  age: 30,
   pay_status_sep: 0,
   pay_status_aug: 0,
   pay_status_jul: 0,
@@ -32,6 +37,10 @@ const initialFeatures = {
 
 const featureLabels = {
   limit_bal: "Credit limit",
+  sex: "Sex (1 = male, 2 = female)",
+  education: "Education code (0–6)",
+  marriage: "Marital status code (0–3)",
+  age: "Age in years",
   pay_status_sep: "September repayment status",
   pay_status_aug: "August repayment status",
   pay_status_jul: "July repayment status",
@@ -125,30 +134,52 @@ export default function Home() {
   const [externalReference, setExternalReference] = useState("");
   const [features, setFeatures] = useState(initialFeatures);
   const [latestResult, setLatestResult] = useState(null);
+  const [token, setToken] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
 
   const selectedBorrower = borrowers.find(
     (borrower) => String(getBorrowerId(borrower)) === String(selectedBorrowerId)
   );
 
-  const request = useCallback(async (path, options = {}) => {
-    const response = await fetch(`${API_URL}${path}`, {
-      ...options,
-      headers: {
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...options.headers,
-      },
-    });
 
-    const data = await response.json().catch(() => ({}));
+const request = useCallback(async (path, options = {}) => {
+  const savedToken =
+    typeof window !== "undefined"
+      ? window.sessionStorage.getItem("credit_risk_token")
+      : null;
 
-    if (!response.ok) {
-      throw new Error(
-        getErrorMessage(data, `Request failed (${response.status})`)
-      );
+  const activeToken = token || savedToken;
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(activeToken
+        ? { Authorization: `Bearer ${activeToken}` }
+        : {}),
+      ...options.headers,
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    if (response.status === 401 && activeToken) {
+      window.sessionStorage.removeItem("credit_risk_token");
     }
 
-    return data;
-  }, []);
+    throw new Error(
+      getErrorMessage(data, `Request failed (${response.status})`)
+    );
+  }
+
+  return data;
+}, [token]);
 
   const loadBorrowers = useCallback(async () => {
     const data = await request("/borrowers");
@@ -191,13 +222,44 @@ export default function Home() {
     [request]
   );
 
+  // Restore the login for this browser tab and validate the token with the API.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreSession() {
+      const savedToken = window.sessionStorage.getItem("credit_risk_token");
+      if (!savedToken) {
+        setLoading(false);
+        return;
+      }
+
+      setToken(savedToken);
+      try {
+        const response = await fetch(`${API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${savedToken}` },
+        });
+        const user = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(getErrorMessage(user, "Session expired"));
+        if (!cancelled) setCurrentUser(user);
+      } catch {
+        window.sessionStorage.removeItem("credit_risk_token");
+        if (!cancelled) {
+          setToken(null);
+          setCurrentUser(null);
+          setLoading(false);
+        }
+      }
+    }
+
+    restoreSession();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Health is public; borrower data is loaded only after authentication.
   useEffect(() => {
     let cancelled = false;
 
     async function initialise() {
-      setLoading(true);
-      setError("");
-
       try {
         await request("/health/db");
         if (!cancelled) setBackendStatus("Connected");
@@ -205,31 +267,25 @@ export default function Home() {
         if (!cancelled) setBackendStatus("Offline");
       }
 
-      try {
-        const data = await request("/borrowers");
-        if (cancelled) return;
+      if (!currentUser) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
 
-        const list = Array.isArray(data) ? data : data?.borrowers || [];
-        setBorrowers(list);
-        setSelectedBorrowerId(
-          list.length ? String(getBorrowerId(list[0])) : ""
-        );
+      setLoading(true);
+      setError("");
+      try {
+        await loadBorrowers();
       } catch (err) {
-        if (!cancelled) {
-          setError(
-            `${err.message}. Check that FastAPI is running at ${API_URL}.`
-          );
-        }
+        if (!cancelled) setError(`${err.message}. Check that FastAPI is running at ${API_URL}.`);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
     initialise();
-    return () => {
-      cancelled = true;
-    };
-  }, [request]);
+    return () => { cancelled = true; };
+  }, [request, currentUser, loadBorrowers]);
 
   useEffect(() => {
     if (!selectedBorrowerId) {
@@ -292,7 +348,6 @@ export default function Home() {
         method: "POST",
         body: JSON.stringify({
           full_name: borrowerName.trim(),
-          managed_by: 1,
           external_reference: externalReference.trim() || null,
         }),
       });
@@ -376,6 +431,79 @@ export default function Home() {
 
   function updateFeature(key, value) {
     setFeatures((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleAuth(event) {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    setAuthLoading(true);
+
+    try {
+      if (authMode === "register") {
+        const registerResponse = await fetch(`${API_URL}/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name: authName.trim(),
+            email: authEmail.trim(),
+            password: authPassword,
+          }),
+        });
+        const registerData = await registerResponse.json().catch(() => ({}));
+        if (!registerResponse.ok) {
+          throw new Error(getErrorMessage(registerData, "Registration failed"));
+        }
+      }
+
+      const form = new URLSearchParams();
+      form.set("username", authEmail.trim());
+      form.set("password", authPassword);
+      const loginResponse = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
+      });
+      const loginData = await loginResponse.json().catch(() => ({}));
+      if (!loginResponse.ok) throw new Error(getErrorMessage(loginData, "Login failed"));
+
+      const newToken = loginData.access_token;
+      if (!newToken) throw new Error("The server did not return an access token.");
+      window.sessionStorage.setItem("credit_risk_token", newToken);
+      setToken(newToken);
+
+      const meResponse = await fetch(`${API_URL}/auth/me`, {
+        headers: { Authorization: `Bearer ${newToken}` },
+      });
+      const me = await meResponse.json().catch(() => ({}));
+      if (!meResponse.ok) {
+        window.sessionStorage.removeItem("credit_risk_token");
+        setToken(null);
+        throw new Error(getErrorMessage(me, "Could not load your account"));
+      }
+
+      setCurrentUser(me);
+      setAuthPassword("");
+      setSuccess("Signed in successfully.");
+    } catch (err) {
+      setError(err.message || "Authentication failed.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    window.sessionStorage.removeItem("credit_risk_token");
+    setToken(null);
+    setCurrentUser(null);
+    setBorrowers([]);
+    setAssessments([]);
+    setSelectedBorrowerId("");
+    setLatestResult(null);
+    setError("");
+    setSuccess("");
+    setLoading(false);
+    setAuthMode("login");
   }
 
   function renderRiskBadge(category) {
@@ -724,6 +852,9 @@ export default function Home() {
       "pay_amt6",
     ];
 
+    const demographicKeys = ["sex", "education", "marriage", "age"];
+
+
     return (
       <>
         <section className="panel">
@@ -780,6 +911,40 @@ export default function Home() {
                       step="any"
                       value={features[key]}
                       onChange={(event) => updateFeature(key, event.target.value)}
+                      required
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="feature-group">
+              <h3>Demographic details</h3>
+              <p className="panel-description">
+                Enter the demographic values using the dataset's coding.
+              </p>
+              <div className="feature-grid">
+                {demographicKeys.map((key) => (
+                  <div className="feature-field" key={key}>
+                    <label htmlFor={key}>{featureLabels[key]}</label>
+                    <input
+                      id={key}
+                      type="number"
+                      min={key === "sex" ? 1 : key === "age" ? 1 : 0}
+                      max={
+                        key === "sex"
+                          ? 2
+                          : key === "education"
+                            ? 6
+                            : key === "marriage"
+                              ? 3
+                              : 120
+                      }
+                      step="1"
+                      value={features[key]}
+                      onChange={(event) =>
+                        updateFeature(key, event.target.value)
+                      }
                       required
                     />
                   </div>
@@ -950,6 +1115,54 @@ export default function Home() {
     );
   }
 
+  if (!currentUser) {
+    return (
+      <div className="auth-page">
+        <section className="auth-card">
+          <div className="brand auth-brand">
+            <div className="brand-mark">CR</div>
+            <div>
+              <div className="brand-name">Credence</div>
+              <div className="brand-subtitle">Credit Risk Platform</div>
+            </div>
+          </div>
+          <h1>{authMode === "login" ? "Welcome back" : "Create your account"}</h1>
+          <p className="auth-description">
+            {authMode === "login" ? "Sign in to manage borrowers and assess credit risk." : "Register as an analyst to get started."}
+          </p>
+          {error && <div className="alert alert-error" role="alert">{error}</div>}
+          <form onSubmit={handleAuth} className="auth-form">
+            {authMode === "register" && (
+              <div className="form-field">
+                <label htmlFor="auth-name">Full name</label>
+                <input id="auth-name" value={authName} onChange={(event) => setAuthName(event.target.value)} autoComplete="name" required />
+              </div>
+            )}
+            <div className="form-field">
+              <label htmlFor="auth-email">Email</label>
+              <input id="auth-email" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} autoComplete="email" required />
+            </div>
+            <div className="form-field">
+              <label htmlFor="auth-password">Password</label>
+              <input id="auth-password" type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} autoComplete={authMode === "login" ? "current-password" : "new-password"} minLength={authMode === "register" ? 12 : undefined} required />
+              {authMode === "register" && <small>Use at least 12 characters.</small>}
+            </div>
+            <button className="button button-primary auth-submit" type="submit" disabled={authLoading}>
+              {authLoading ? "Please wait…" : authMode === "login" ? "Sign in" : "Create account"}
+            </button>
+          </form>
+          <p className="auth-switch">
+            {authMode === "login" ? "Don't have an account? " : "Already registered? "}
+            <button type="button" className="text-button" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setError(""); }}>
+              {authMode === "login" ? "Create account" : "Sign in"}
+            </button>
+          </p>
+          <p className="auth-note">New registrations receive the analyst role. Admin privileges must be assigned by an administrator.</p>
+        </section>
+      </div>
+    );
+  }
+
   const navigation = [
     { label: "Overview", icon: "⌂" },
     { label: "Borrowers", icon: "♙" },
@@ -1005,6 +1218,12 @@ export default function Home() {
               Monitor borrower records and evaluate credit default risk.
             </p>
           </div>
+          <div className="header-actions">
+            <div className="user-chip">
+              <strong>{currentUser.full_name || currentUser.email}</strong>
+              <span>{currentUser.role || "user"}</span>
+            </div>
+            <button className="button button-secondary" onClick={handleLogout}>Sign out</button>
           <button
             className="button button-secondary"
             onClick={async () => {
@@ -1023,6 +1242,7 @@ export default function Home() {
           >
             ↻ Refresh
           </button>
+          </div>
         </header>
 
         {error && (
