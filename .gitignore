@@ -21,3 +21,6 @@ frontend-next-backup/
 
 # Large trained model — share separately
 backend/*.joblib
+
+# Trained model artifacts
+*.joblib

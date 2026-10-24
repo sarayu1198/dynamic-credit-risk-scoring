@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pandas
+scikit-learn
+joblib
+SQLAlchemy
+psycopg[binary]
+python-dotenv
+pydantic
+pwdlib[argon2]
+PyJWT
+email-validator
+python-multipart
+pymongo>=4.9,<5
