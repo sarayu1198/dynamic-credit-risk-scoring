@@ -25,3 +25,4 @@ backend/*.joblib
 # Trained model artifacts
 *.joblib
 dynamic_credit_risk_scoring.backup
+model_experiments/
