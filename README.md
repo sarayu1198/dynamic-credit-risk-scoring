@@ -240,6 +240,3 @@ Re-run the test suite after changes to authentication, prediction logic, databas
 - Treat risk predictions as estimates rather than certainties.
 - Use anonymized or synthetic records for demonstrations and tests.
 
-## License and Dataset Attribution
-
-Add the chosen software license and the dataset's original attribution and usage terms before public distribution.
