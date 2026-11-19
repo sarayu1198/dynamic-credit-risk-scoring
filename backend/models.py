@@ -44,6 +44,13 @@ class Borrower(Base):
         ForeignKey("users.user_id"),
         nullable=False,
     )
+    # A borrower profile may optionally be linked to one login account.
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+        unique=True,
+        nullable=True,
+    )
     full_name: Mapped[str] = mapped_column(String(150))
     external_reference: Mapped[str | None] = mapped_column(
         String(50), unique=True
@@ -81,3 +88,4 @@ class RiskAssessment(Base):
     assessed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+

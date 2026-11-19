@@ -2,7 +2,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 
@@ -14,11 +14,17 @@ class BorrowerCreate(BaseModel):
 
 
 
+class BorrowerAccountCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+
+
 class BorrowerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     borrower_id: int
     managed_by: int
+    user_id: int | None = None
     full_name: str
     external_reference: str | None
     created_at: datetime

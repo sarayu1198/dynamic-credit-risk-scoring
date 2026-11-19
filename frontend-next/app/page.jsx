@@ -146,6 +146,9 @@ export default function Home() {
     (borrower) => String(getBorrowerId(borrower)) === String(selectedBorrowerId)
   );
 
+  const isBorrower = currentUser?.role === "borrower";
+  const canManageBorrowers = currentUser?.role === "admin" || currentUser?.role === "analyst";
+
 
 const request = useCallback(async (path, options = {}) => {
   const savedToken =
@@ -636,15 +639,17 @@ const request = useCallback(async (path, options = {}) => {
             <div>
               <h2 className="panel-title">Borrowers</h2>
               <p className="panel-description">
-                View records and choose a borrower for risk assessment.
+                {isBorrower ? "View your borrower profile." : "View records and choose a borrower for risk assessment."}
               </p>
             </div>
-            <button
-              className="button button-primary"
-              onClick={() => setActiveView("Borrowers")}
-            >
-              + Add borrower
-            </button>
+            {canManageBorrowers && (
+              <button
+                className="button button-primary"
+                onClick={() => setActiveView("Borrowers")}
+              >
+                + Add borrower
+              </button>
+            )}
           </div>
 
           {renderBorrowerTable(borrowers.slice(0, 5))}
@@ -668,12 +673,14 @@ const request = useCallback(async (path, options = {}) => {
                 Most recent result for the selected borrower.
               </p>
             </div>
-            <button
-              className="button button-secondary"
-              onClick={() => setActiveView("Risk assessment")}
-            >
-              Run assessment
-            </button>
+            {canManageBorrowers && (
+              <button
+                className="button button-secondary"
+                onClick={() => setActiveView("Risk assessment")}
+              >
+                Run assessment
+              </button>
+            )}
           </div>
           {renderAssessmentResult(latestAssessment)}
         </section>
@@ -732,10 +739,10 @@ const request = useCallback(async (path, options = {}) => {
                       className="table-action"
                       onClick={() => {
                         setSelectedBorrowerId(String(id));
-                        setActiveView("Risk assessment");
+                        setActiveView(isBorrower ? "Assessment history" : "Risk assessment");
                       }}
                     >
-                      Select
+                      {isBorrower ? "View history" : "Select"}
                     </button>
                   </td>
                 </tr>
@@ -750,6 +757,7 @@ const request = useCallback(async (path, options = {}) => {
   function renderBorrowers() {
     return (
       <>
+        {canManageBorrowers && (
         <section className="panel">
           <div className="panel-header">
             <div>
@@ -795,13 +803,14 @@ const request = useCallback(async (path, options = {}) => {
             </div>
           </form>
         </section>
+        )}
 
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">All borrowers</h2>
+              <h2 className="panel-title">{isBorrower ? "My borrower profile" : "All borrowers"}</h2>
               <p className="panel-description">
-                Select a record to assess its credit risk.
+                {isBorrower ? "Your linked borrower account and assessment history." : "Select a record to assess its credit risk."}
               </p>
             </div>
           </div>
@@ -1166,7 +1175,7 @@ const request = useCallback(async (path, options = {}) => {
   const navigation = [
     { label: "Overview", icon: "⌂" },
     { label: "Borrowers", icon: "♙" },
-    { label: "Risk assessment", icon: "◈" },
+    ...(canManageBorrowers ? [{ label: "Risk assessment", icon: "◈" }] : []),
     { label: "Assessment history", icon: "◷" },
   ];
 
@@ -1215,7 +1224,7 @@ const request = useCallback(async (path, options = {}) => {
             <div className="eyebrow">CREDIT RISK MANAGEMENT</div>
             <h1 className="page-title">{activeView}</h1>
             <p className="page-description">
-              Monitor borrower records and evaluate credit default risk.
+              {isBorrower ? "View your borrower profile and credit risk assessment history." : "Monitor borrower records and evaluate credit default risk."}
             </p>
           </div>
           <div className="header-actions">
@@ -1277,7 +1286,7 @@ const request = useCallback(async (path, options = {}) => {
           <>
             {activeView === "Overview" && renderOverview()}
             {activeView === "Borrowers" && renderBorrowers()}
-            {activeView === "Risk assessment" && renderAssessmentForm()}
+            {activeView === "Risk assessment" && canManageBorrowers && renderAssessmentForm()}
             {activeView === "Assessment history" && renderHistory()}
           </>
         )}

@@ -11,7 +11,7 @@ CREATE TABLE users (
     email VARCHAR(255) NOT NULL,
     password_hash TEXT NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'analyst'
-        CHECK (role IN ('admin', 'analyst')),
+        CHECK (role IN ('admin', 'analyst', 'borrower')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -24,6 +24,8 @@ CREATE TABLE borrowers (
     borrower_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     managed_by BIGINT NOT NULL
         REFERENCES users(user_id) ON DELETE RESTRICT,
+    user_id BIGINT UNIQUE
+        REFERENCES users(user_id) ON DELETE SET NULL,
     full_name VARCHAR(150) NOT NULL,
     external_reference VARCHAR(50) UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

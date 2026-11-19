@@ -28,6 +28,7 @@ from backend.auth import (
 from backend.database import get_db
 from backend.models import Borrower, RiskAssessment, User
 from backend.schemas import (
+    BorrowerAccountCreate,
     BorrowerCreate,
     BorrowerResponse,
     PredictionRequest,
@@ -199,12 +200,16 @@ def get_accessible_borrower(
             detail="Borrower not found",
         )
 
-    # Admins can access every borrower. Analysts can access
-    # only borrowers assigned to their own user ID.
-    if (
-        current_user.role != "admin"
-        and borrower.managed_by != current_user.user_id
-    ):
+    # Admins can access all profiles; analysts can access profiles they
+    # manage; borrowers can access only the profile linked to their login.
+    if current_user.role == "borrower":
+        has_access = borrower.user_id == current_user.user_id
+    elif current_user.role == "admin":
+        has_access = True
+    else:
+        has_access = borrower.managed_by == current_user.user_id
+
+    if not has_access:
         # Return 404 to avoid revealing another user's records.
         raise HTTPException(
             status_code=404,
@@ -315,6 +320,59 @@ def create_borrower(
     return borrower
 
 
+@app.post("/borrowers/{borrower_id}/account", status_code=201)
+def create_borrower_account(
+    borrower_id: int,
+    account_data: BorrowerAccountCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "analyst")),
+):
+    """Create and link a borrower login for an existing borrower profile."""
+    borrower = get_accessible_borrower(borrower_id, db, current_user)
+
+    if borrower.user_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="This borrower already has a login account.",
+        )
+
+    email = str(account_data.email).strip().lower()
+    if get_user_by_email(db, email):
+        raise HTTPException(
+            status_code=409,
+            detail="Email already registered.",
+        )
+
+    user = User(
+        full_name=borrower.full_name,
+        email=email,
+        password_hash=hash_password(account_data.password),
+        role="borrower",
+    )
+    db.add(user)
+
+    try:
+        db.flush()
+        borrower.user_id = user.user_id
+        db.commit()
+        db.refresh(user)
+        db.refresh(borrower)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Could not create the borrower account. Check the email and profile.",
+        )
+
+    return {
+        "message": "Borrower login created successfully.",
+        "user_id": user.user_id,
+        "borrower_id": borrower.borrower_id,
+        "email": user.email,
+        "role": user.role,
+    }
+
+
 @app.get(
     "/borrowers",
     response_model=list[BorrowerResponse],
@@ -325,7 +383,9 @@ def list_borrowers(
 ):
     statement = select(Borrower)
 
-    if current_user.role != "admin":
+    if current_user.role == "borrower":
+        statement = statement.where(Borrower.user_id == current_user.user_id)
+    elif current_user.role != "admin":
         statement = statement.where(
             Borrower.managed_by == current_user.user_id
         )
@@ -463,7 +523,9 @@ def create_risk_review(
     borrower_id: int,
     review: RiskReviewCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        require_roles("admin", "analyst")
+    ),
 ):
     borrower = get_accessible_borrower(borrower_id, db, current_user)
 
@@ -517,3 +579,4 @@ def list_risk_reviews(
             status_code=503,
             detail="MongoDB is temporarily unavailable",
         ) from exc
+
